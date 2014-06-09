@@ -1,0 +1,73 @@
+<?php
+
+/**
+ * @file
+ * Install, update, and uninstall functions for the statistics_hide_stats module.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function statistics_hide_stats_schema() {
+	$schema = array();
+
+	$schema['hide_stats'] = array(
+		'description' => 'Table for module statistics_hide_stats',
+		'fields' => array(
+	      'nid' => array(
+	        'description' => 'The primary identifier for a node.',
+	        'type' => 'serial',
+	        'unsigned' => TRUE,
+	        'not null' => TRUE,
+	      ),
+	      'hide' => array(
+	        'description' => 'Show or hide views (1 - hide, 0 - show)',
+	        'type' => 'int',
+	        'unsigned' => TRUE,
+	        'not null' => TRUE,
+	        'default' => 0,
+	      )
+	    ),
+	    'primary key' => array('nid')
+	);
+
+	$schema['hide_stats_content_types'] = array(
+		'description' => 'Table for module statistics_hide_stats',
+		'fields' => array(
+	      'content_type' => array(
+	        'description' => 'Content type',
+	        'type' => 'varchar',
+	        'length' => 255,
+	        'not null' => TRUE,
+	      ),
+	      'hide' => array(
+	        'description' => 'Show or hide views (1 - hide, 0 - show)',
+	        'type' => 'int',
+	        'unsigned' => TRUE,
+	        'not null' => TRUE,
+	        'default' => 0,
+	      )
+	    ),
+	    'primary key' => array('content_type')
+	);
+
+	return $schema;
+}
+
+/**
+ * Implements hook_install().
+ */
+function statistics_hide_stats_install() {
+	// Set the weight of the module is more than the module statistics
+	$res = db_select('system', 's')
+		->fields('s')
+		->condition('name', 'statistics')
+		->execute();
+
+	$stats_settings = $res->fetchObject();
+
+	db_update('system')
+    ->fields(array('weight' => $stats_settings->weight + 1))
+    ->condition('name', 'statistics_hide_stats')
+    ->execute();
+}

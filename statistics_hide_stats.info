@@ -1,0 +1,8 @@
+name = Statistics hide stats
+description = Hide stats in nodes
+core = 7.x
+dependencies[] = statistics
+configure = admin/config/system/statistics/statistics-hide-stats
+
+files[] = hide_views.install
+files[] = hide_views.module

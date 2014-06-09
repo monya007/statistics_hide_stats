@@ -1,0 +1,211 @@
+<?php
+
+/**
+ * @file
+ * Hide statistics info for nodes
+ */
+
+
+/**
+ * Implements hook_node_view().
+ */
+function statistics_hide_stats_node_view($node, $view_mode) {
+  if (isset($node->content['links']['statistics']) && statistics_hide_stats_is_hide($node)) {
+      hide($node->content['links']['statistics']);
+  }
+}
+
+/**
+ * Implements hook_permission().
+ */
+function statistics_hide_stats_permission() {
+	return array(
+		'administer statistics_hide_stats' => array(
+			'title' => t('Administer statistics_hide_stats'),
+			'description' => t('Allow access to settings page of module statistics_hide_stats')
+		),
+ 	);
+}
+
+/**
+ * Implements hook_menu().
+ */
+function statistics_hide_stats_menu() {
+	$items = array();
+
+	$items['admin/config/system/statistics/statistics-hide-stats'] = array(
+		'title' => t('Statistics hide settings'),
+		'page callback' => 'drupal_get_form',
+		'page arguments' => array('statistics_hide_stats_admin_page_form'),
+		'access arguments' => array('administer statistics_hide_stats'),
+		'type' => MENU_NORMAL_ITEM
+	);
+
+	return $items;
+}
+
+/**
+ *	Config module, set default values for node types
+ */
+function statistics_hide_stats_admin_page_form() { 
+	$form = array();
+
+	$node_types = node_type_get_types();
+
+	if (is_array($node_types) && count($node_types)) {
+
+		$options = array();
+		$default = array();
+
+		foreach ($node_types as $key => $node_type) {
+			$options[$node_type->type] = $node_type->name;
+			if (statistics_hide_stats_get_node_type_settings($node_type->type)) {
+				$default[] = $node_type->type;
+			}
+		}
+
+		$form['node_types'] = array(
+			'#type' => 'checkboxes',
+			'#title' => t('Set default values for node types'),
+			'#description' => t('Check node type then you wanna hide stats'),
+			'#options' => $options,
+			'#default_value' => $default
+		);
+
+		$form['submit'] = array(
+			'#type' => 'submit',
+			'#value' => t('Save')
+		);
+	} else {
+		$form['message'] = array(
+			'#type' => 'markup',
+			'#markup' => t("You don't have content types. @link", array("@link" => l(t('Manage content types'), 'admin/structure/types')))
+		);
+	}
+
+	return $form;
+}
+
+/**
+ * Form submission handler for statistics_hide_stats_admin_page_form().
+ */
+function statistics_hide_stats_admin_page_form_submit($form, &$form_state) {
+	statistics_hide_stats_merge_node_types($form_state['values']['node_types']);
+}
+
+/**
+ *	Save settings for node types
+ *  @param $values
+ *  Array of values to set settings (@see statistics_hide_stats_admin_page_form_submit)
+ */
+function statistics_hide_stats_merge_node_types($values) {
+	$node_types = node_type_get_types();
+
+	foreach ($node_types as $key => $node_type) {
+		if (!empty($values[$node_type->type]) && $values[$node_type->type] == $node_type->type) {
+			$res = db_merge('hide_stats_content_types')
+				->key(array('content_type' => $node_type->type))
+				->fields(array('hide' => 1))
+				->execute();
+		} else {
+			$res = db_merge('hide_stats_content_types')
+				->key(array('content_type' => $node_type->type))
+				->fields(array('hide' => 0))
+				->execute();
+		}
+	}
+}
+
+/**
+ *	Return setting for node type
+ *  @param $type
+ *	String, type of node
+ */
+function statistics_hide_stats_get_node_type_settings($type) {
+	$result = db_select('hide_stats_content_types', 'ct')
+				->fields('ct')
+				->condition('ct.content_type', $type)
+				->execute();
+
+	if ($settings = $result->fetchObject()) {
+		return $settings->hide;
+	}
+
+	return 0;
+}
+
+/**
+ * Return node settings
+ * @param $node
+ * Node to check.
+ */
+function statistics_hide_stats_is_hide($node) {
+	if (is_numeric($node->nid)) {
+		$q = db_query("SELECT h.hide FROM {hide_stats} h WHERE h.nid = " . $node->nid . " ");
+		if ($res = $q->fetchObject()) {
+			return $res->hide;
+		}
+	} 
+	return statistics_hide_stats_get_node_type_settings($node->type);
+}
+
+/**
+ * Implements hook_form_BASE_FORM_ID_alter() for node_form().
+ */
+function statistics_hide_stats_form_node_form_alter(&$form, $form_state) {
+	if (isset($form['type']) && user_access('administer hide_views')) {
+		$node = $form['#node'];
+
+	    $form['statistics'] = array(
+	      '#type' => 'fieldset',
+	      '#title' => t('Statistics settings'),
+	      '#collapsible' => TRUE,
+	      '#collapsed' => TRUE,
+	      '#group' => 'additional_settings',
+	    );
+
+        $default = statistics_hide_stats_is_hide($node);
+
+	    $form['statistics']['hide_stats'] = array(
+	      '#type' => 'checkbox',
+	      '#title' => t('Hide stats'),
+	      '#default_value' => $default,
+	    );
+	}
+}
+
+
+/**
+ *	Set setting for node
+ *  @param $nid
+ *  Nid of the node
+ *  @param $value
+ *	Value to set (1 - hide stats, 0 - show stats)
+ */
+function statistics_hide_stats_set($nid, $value) {
+	db_merge('hide_stats')
+		->key(array('nid' => $nid))
+		->fields(array('hide' => $value))
+		->execute();
+}
+
+/**
+ * Implements hook_node_insert().
+ */
+function statistics_hide_stats_node_insert($node) {
+	statistics_hide_stats_set($node->nid, $node->hide_stats);
+}
+
+/**
+ * Implements hook_node_update().
+ */
+function statistics_hide_stats_node_update($node) {
+	statistics_hide_stats_set($node->nid, $node->hide_stats);
+}
+
+/**
+ * Implements hook_node_delete().
+ */
+function statistics_hide_stats_node_delete($node) {
+	db_delete('hide_stats')->condition(array('nid' => $node->nid))->execute();
+}
